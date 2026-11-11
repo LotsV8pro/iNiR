@@ -12,7 +12,7 @@ import "root:modules/common/functions/LyricsMath.js" as LyricsMath
 Singleton {
     id: root
 
-    readonly property MprisPlayer activePlayer: MprisController.activePlayer
+    readonly property MprisPlayer activePlayer: MprisController.lyricsPlayer
 
     // Who holds it, not how many: across a reload the old holder's release reached the new instance and dropped the
     // new holder's claim (ResourceUsage froze every reading that way).
@@ -131,6 +131,21 @@ Singleton {
         const requestId = String(root._requestSerial);
         root._latestRequestId = requestId;
         root._latestTrackKey = snapshot.key;
+
+        // The player has already looked this one up: its file is the same
+        // song sung with the same timings (and the words stamped), so there
+        // is nothing to download.
+        if (snapshot.title && snapshot.artist) {
+            const published = root._publishedLines(snapshot);
+            if (published) {
+                root._pendingRequest = null;
+                if (lyricsProc.running)
+                    lyricsProc.running = false;
+                console.log("LyricsService: letra publicada por Lotus Tune para", snapshot.title);
+                root._publishSuccess(requestId, published);
+                return;
+            }
+        }
 
         if (!snapshot.title || !snapshot.artist) {
             root._pendingRequest = null;
@@ -329,6 +344,129 @@ Singleton {
                 root.slots = root.buildSlots(idx);
             }
         }
+    }
+
+    // ─── lyrics published by Lotus Tune ─────────────────────────────────
+    // The app that is playing runs the same lookup we do, but better: it
+    // picks the source that matches the video, aligns the words to it and
+    // publishes the result (~/.local/state/lotus-tune/lyrics.json) with the
+    // stamp of every word. When that file is the track being played it
+    // wins: the widgets sing along with exactly the same timings as the
+    // player (no second download, no different version of the song).
+    // Quickshell's StateLocation is its own (~/.local/state/quickshell); the
+    // app writes to the user's generic state (~/.local/state/lotus-tune).
+    readonly property string _lotusState: {
+        const xdg = Quickshell.env("XDG_STATE_HOME");
+        return (xdg && xdg.length > 0) ? xdg : `${Directories.homePath}/.local/state`;
+    }
+
+    FileView {
+        id: publishedLyrics
+        path: `${root._lotusState}/lotus-tune/lyrics.json`
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoadedChanged: root._usePublished()
+    }
+
+    FileView {
+        id: publishedRuntime
+        path: `${root._lotusState}/lotus-tune/lyrics-runtime.json`
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoadedChanged: root._usePublished()
+    }
+
+    // "Poppy - New Way Out" and "Poppy — new way out" have to be the same
+    // track.
+    function _normKey(text: string): string {
+        return String(text || "").toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]+/g, " ").trim();
+    }
+
+    // "<01:23.45>", the word stamp of enhanced LRC.
+    function _stamp(t: real): string {
+        const cs = Math.max(0, Math.round(Number(t) * 100));
+        const secs = Math.floor(cs / 100);
+        const mm = String(Math.floor(secs / 60)).padStart(2, "0");
+        const ss = String(secs % 60).padStart(2, "0");
+        const cc = String(cs % 100).padStart(2, "0");
+        return `<${mm}:${ss}.${cc}>`;
+    }
+
+    // The published lines as { time, text, marks }, or null when the file is
+    // not this track (or is a leftover from another session).
+    function _publishedLines(snapshot: var): var {
+        if (!publishedLyrics.loaded || !publishedRuntime.loaded)
+            return null;
+        let data, runtime;
+        try {
+            data = JSON.parse(publishedLyrics.text());
+            runtime = JSON.parse(publishedRuntime.text());
+        } catch (e) {
+            return null;
+        }
+        if (!data || data.status !== "ok" || !(data.lines instanceof Array) || data.lines.length === 0)
+            return null;
+
+        // The app writes the key as "Artist - Title"; _normKey turns the
+        // dash into a space, so the two sides have to be joined the same way.
+        const key = `${root._normKey(snapshot.artist)} ${root._normKey(snapshot.title)}`.trim();
+        if (root._normKey(data.trackKey) !== key || root._normKey(runtime.trackKey) !== key)
+            return null;
+        // The runtime is written while the app is on that track: an old file
+        // (the app closed, another song in another player) is not proof.
+        if (!(Date.now() - Number(runtime.ts || 0) < 90000))
+            return null;
+        if (Number(snapshot.duration) > 0 && Number(data.duration) > 0
+                && Math.abs(Number(data.duration) - Number(snapshot.duration)) > 8)
+            return null;
+
+        const out = [];
+        for (const line of data.lines) {
+            if (typeof line.t !== "number")
+                continue;
+            const words = (line.w instanceof Array) ? line.w : [];
+            // The stamps go back to enhanced LRC and through readWords: that
+            // way the text and the marks line up exactly as with any other
+            // source (the marks are character offsets inside the clean text).
+            const body = words.length > 1
+                ? words.map(w => root._stamp(w.t) + String(w.text ?? "")).join("")
+                : String(line.text ?? "");
+            const parsed = LyricsMath.readWords(body);
+            // A stretch without voice goes as a gap: the face draws its three dots there. Its own end keeps the
+            // dots on exactly the stretch the player marks, and the "♪ ♪ ♪" text never reaches the screen.
+            const instrumental = line.instrumental === true;
+            out.push({
+                time: line.t,
+                text: instrumental ? "" : parsed.text,
+                marks: instrumental ? [] : parsed.marks,
+                end: Number(line.e)
+            });
+        }
+        return out.length > 0 ? out : null;
+    }
+
+    // The app has just published (or refreshed) the lyrics of what it plays.
+    function _usePublished(): void {
+        if (!root.active)
+            return;
+        const snapshot = root._snapshot();
+        if (snapshot.key === root._publishedTrackKey)
+            return;
+        const lines = root._publishedLines(snapshot);
+        if (!lines)
+            return;
+        root._requestSerial++;
+        const requestId = String(root._requestSerial);
+        root._latestRequestId = requestId;
+        root._latestTrackKey = snapshot.key;
+        console.log("LyricsService: letra publicada por Lotus Tune para", snapshot.title);
+        root._publishSuccess(requestId, lines);
     }
 
     Process {

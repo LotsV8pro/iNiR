@@ -177,6 +177,14 @@ function wordTimes(text, marks, t0, dur) {
     return out
 }
 
+// A line that is only music notes ("♪", "♪ ♪ ♪") is a stretch without voice drawn as text by some providers. It is
+// the dots, never a sung line: leaving it as text drew the notes under the dots of its own gap.
+var NOTE_GLYPH = /[\u2669-\u266f\u{1d100}-\u{1d1ff}\u{1f3b5}\u{1f3b6}]/u
+var NOTES_ONLY = /^[\s\u2669-\u266f\u{1d100}-\u{1d1ff}\u{1f3b5}\u{1f3b6}]+$/u
+function isNotes(text) {
+    return NOTES_ONLY.test(String(text || ""))
+}
+
 // The stage: every line with when its words are sung, an intro and every long instrumental stretch as a gap
 // line (no text) that the three dots fill.
 function stage(lines) {
@@ -186,13 +194,32 @@ function stage(lines) {
     for (var i = 0; i < lines.length; i++) {
         var l = lines[i], next = lines[i + 1]
         var room = next ? next.time - l.time : Infinity
-        if (!l.text || l.text === "♪") {
-            // A blank stamp: a gap when it lasts, otherwise only the end of the line before.
-            if (room >= GAP_MIN) out.push({ time: l.time, text: "", gap: true, until: next ? next.time : l.time + 8 })
+        var notes = isNotes(l.text)
+        if (!l.text || notes) {
+            // A blank stamp: a gap when it lasts, otherwise only the end of the line before. A notes-only line is
+            // always the stretch (its own end when the source gives one), even when it is short.
+            var end = Number(l.end ?? l.until)
+            if (!(end > l.time)) end = next ? next.time : l.time + 8
+            if (!NOTE_GLYPH.test(String(l.text || "")) && room < GAP_MIN) continue
+            var prev = out.length > 0 ? out[out.length - 1] : null
+            if (prev && prev.gap && prev.until >= l.time - 0.25)
+                prev.until = Math.max(prev.until, end)
+            else
+                out.push({ time: l.time, text: "", gap: true, until: end })
             continue
         }
-        var span = sungSpan(l.text, room, rate)
-        out.push({ time: l.time, text: l.text, gap: false, words: wordTimes(l.text, l.marks, l.time, span), until: l.time + span })
+        // A source that says where the line ends (the app does) wins over the estimate: the last word is held exactly
+        // as long as it is sung, and the stretch after the line is measured from the real end.
+        var own = Number(l.end)
+        var span = own > l.time ? own - l.time : sungSpan(l.text, room, rate)
+        // `synced`: the source stamped more than one word of this line (the app's own test). Only then does the line
+        // fill word by word; a line that only knows when it starts lights whole, as the app draws those. The word
+        // times here are a fallback for the line's own timing, never a sweep invented out of nothing.
+        var marks = l.marks || []
+        out.push({
+            time: l.time, text: l.text, gap: false, synced: marks.length > 1,
+            words: wordTimes(l.text, marks, l.time, span), until: l.time + span
+        })
         // Sung well before the next line starts: the stretch after it is an instrumental part.
         if (next && next.text && room - span - 0.6 >= GAP_MIN)
             out.push({ time: l.time + span + 0.6, text: "", gap: true, until: next.time })
