@@ -1676,6 +1676,13 @@ JsonAdapter {
             // Array of calendar sources: { id, name, url, color, enabled }
             property list<var> sources: []
         }
+        // Google Calendar over OAuth (device flow): the person's own client, the token kept on this machine.
+        property JsonObject googleOAuth: JsonObject {
+            property string clientId: ""
+            property string clientSecret: ""
+            property bool pushEnabled: false
+            property int importDays: 365
+        }
         // Show upcoming events below calendar grid
         property bool showUpcoming: true
         // Number of days to show in upcoming view

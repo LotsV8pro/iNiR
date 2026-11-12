@@ -405,7 +405,12 @@ QtObject {
         return root.value(spec.widget, spec.key, plate)
     }
     function write(spec: var, next: var): void {
-        if (spec.widgetEnable) { DesktopWidgetLayout.setGloballyEnabled(spec.widget, Boolean(next)); return }
+        if (spec.widgetEnable) {
+            // The quick controls belong to one widget on one screen: its switch is that screen's, not every screen's.
+            if (root.output.length > 0) DesktopWidgetLayout.setEnabled(root.output, spec.widget, Boolean(next))
+            else DesktopWidgetLayout.setGloballyEnabled(spec.widget, Boolean(next))
+            return
+        }
         if (spec.shell) { Config.setNestedValue(spec.shell, next); return }
         let value = next
         if (spec.key === "timezones") value = Array.from(next ?? []).slice(0, WorldClock.maxTimezones)

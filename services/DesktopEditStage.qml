@@ -152,6 +152,8 @@ Singleton {
         const next = Object.assign({}, root.arrivals)
         next[output + "::" + key] = { at: at, from: from, glide: Boolean(glide) }
         root.arrivals = next
+        // Per screen: taking a widget from the shelf puts it on the screen it was dropped on, not on every screen.
+        // Settings' switch still turns a widget on or off everywhere (setGloballyEnabled, which clears these).
         DesktopWidgetLayout.setEnabledOn(output, key, true)
     }
     function arrival(output: string, key: string): var { return root.arrivals[output + "::" + key] ?? null }

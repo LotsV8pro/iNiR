@@ -418,6 +418,23 @@ Singleton {
 		return players[0] ?? null;
 	}
 
+	// Lyrics have nothing to read from a browser: a YouTube or Twitch tab will never have synced words. Lyric surfaces
+	// ask for this instead of activePlayer: it keeps a player that can carry lyrics, and if only a browser is playing
+	// it returns none, so the face says "play something with words" rather than fetching words that do not exist.
+	readonly property MprisPlayer lyricsPlayer: {
+		const _ = _playbackStateVersion;
+		const current = activePlayer;
+		if (current && !root._isBrowserPlayer(current)) return current;
+		const visible = displayPlayers ?? [];
+		for (let i = 0; i < visible.length; i++) {
+			if (!root._isBrowserPlayer(visible[i]) && visible[i]?.isPlaying) return visible[i];
+		}
+		for (let i = 0; i < visible.length; i++) {
+			if (!root._isBrowserPlayer(visible[i])) return visible[i];
+		}
+		return null;
+	}
+
 	readonly property bool isYtMusicActive: {
 		if (!(Config.options?.ytmusic?.enable ?? false)) return false;
 		if (activePlayer) return _isYtMusicMpv(activePlayer);
