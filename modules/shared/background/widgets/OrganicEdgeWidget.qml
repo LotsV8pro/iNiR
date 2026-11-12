@@ -9,6 +9,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.models
 import qs.modules.common.widgets
+import qs.modules.shared.background.widgets
 import "OrganicEdgeConfig.js" as EdgeConfig
 
 Item {
@@ -89,12 +90,18 @@ Item {
     }
     AdaptedMaterialScheme {
         id: wallpaperScheme
-        color: Appearance.wallpaperDominantColor
+        color: root.ownScreenColor
+    }
+    // The picture on this panel's own screen. The shell's dominant colour is read from whichever screen applied a
+    // wallpaper last, and that is the one being used, so a panel on the other desk wore its neighbour's hues.
+    readonly property color ownScreenColor: {
+        const seed = DesktopWidgetLook.screenSeed(root.screenName)
+        return seed.length > 0 ? seed : Appearance.wallpaperDominantColor
     }
     readonly property var wallpaperPalette: [
         root.visualColor(wallpaperScheme.colPrimary, Appearance.colors.colPrimary, 0.30, 1.18, 0),
         root.visualColor(wallpaperScheme.colSecondary, Appearance.colors.colSecondary, 0.28, 1.12, 0),
-        root.visualColor(ColorUtils.mix(Appearance.wallpaperDominantColor,
+        root.visualColor(ColorUtils.mix(root.ownScreenColor,
             Appearance.colors.colTertiary, 0.42), Appearance.colors.colTertiary, 0.30, 1.16, 0)
     ]
     readonly property bool albumPaletteAvailable: (albumArtworkQuantizer?.colors?.length ?? 0) > 0
