@@ -20,8 +20,9 @@ AbstractWidget {
     readonly property bool familyDesign: DesktopWidgetDesign.faceDesign.length > 0
         && (root._designResolved.face || (root.faceOnly && root.widgetSharedDesign === "individual"))
     readonly property bool wearsFamily: DesktopWidgetDesign.faceDesign.length === 0 || root.familyDesign
-    // How this family's widgets read: colours, type, shapes (its part `widgetLook`).
-    readonly property var look: DesktopWidgetLook.look
+    // How this family's widgets read: colours, type, shapes (its part `widgetLook`). Reseeded from this widget's own
+    // screen when the family takes its colour from the wallpaper, so a monitor keeps its hue.
+    readonly property var look: DesktopWidgetLook.lookFor(root)
     // That look is the family's (or it has none): what the family draws over this widget may load.
     readonly property bool lookIn: DesktopWidgetLook.holds(root.look)
     // The Background it sits on; a host with no desktop behind it (the lock) sets these itself.
@@ -713,7 +714,11 @@ AbstractWidget {
     // went dark on a dark mountain in light mode.
     // A widget wearing the wallpaper palette always reads its own region, even with a plate: the accent comes from the
     // colours under it, so the reading cannot wait for a widget that would otherwise never ask for one.
-    readonly property bool widgetWantsWallpaperPalette: [root.widgetPrimaryRole, root.widgetSecondaryRole,
+    // A family mode that follows the picture without naming a role per slot ("Wallpaper adaptive") says so here, so
+    // the region is read even when the four configured roles do not spell "wallpaper" out.
+    property bool paletteFollowsWallpaper: false
+    readonly property bool widgetWantsWallpaperPalette: root.paletteFollowsWallpaper
+        || [root.widgetPrimaryRole, root.widgetSecondaryRole,
         root.widgetTertiaryRole, root.widgetSignalRole].some(role => String(role).startsWith("wallpaper"))
     readonly property bool _regionSampling: root.needsColText || root.look.readsRegion(root)
         || root.widgetWantsWallpaperPalette || (!root.widgetHasSurface && !root.familyFaced)
@@ -1140,7 +1145,14 @@ AbstractWidget {
         }
     }
 
-    function widgetSemanticSet(role: string): var { return root.look.semanticSet(root, role) }
+    // The wallpaper roles are answered here, before the family's look: a family's semanticSet (IrisWidgetLook in the
+    // hub) maps every role it does not know onto its own accent, so asking it for "wallpaper" returned one fixed
+    // colour for every widget instead of the tone under each one.
+    function widgetSemanticSet(role: string): var {
+        const name = String(role)
+        return name.startsWith("wallpaper") ? root.look.wallpaperSet(root, name)
+            : root.look.semanticSet(root, role)
+    }
 
     function widgetSemanticColor(role: string): color {
         return root.widgetSemanticSet(role).color;

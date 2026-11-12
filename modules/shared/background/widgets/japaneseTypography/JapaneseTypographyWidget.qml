@@ -65,6 +65,13 @@ AbstractBackgroundWidget {
 
     readonly property string paletteMode: Config.getNestedValue("background.widgets.japaneseTypography.paletteMode", "adaptive")
     readonly property bool manualPalette: root.paletteMode === "manual"
+    // "Wallpaper adaptive" means the picture under the widget, not the shell's scheme: the scheme is generated once
+    // per wallpaper applied and belongs to the whole session, so this widget carried the colours of whichever screen
+    // changed its wallpaper last — the one under the pointer, whatever stood behind the widget itself.
+    paletteFollowsWallpaper: !root.manualPalette
+    readonly property string adaptivePrimaryRole: root.manualPalette ? root.widgetPrimaryRole : "wallpaper"
+    readonly property string adaptiveSecondaryRole: root.manualPalette ? root.widgetSecondaryRole : "wallpaperSoft"
+    readonly property string adaptiveTertiaryRole: root.manualPalette ? root.widgetTertiaryRole : "wallpaperDeep"
     // Manual editorial colors already have dedicated controls; avoid showing a
     // second palette control that would not affect the current rendering.
     semanticPaletteQuickControls: !root.manualPalette
@@ -108,10 +115,10 @@ AbstractBackgroundWidget {
 
     // Adaptive mode selects only generated semantic tokens. Manual palette mode
     // remains explicit user RGB intent and is intentionally left untouched.
-    readonly property color adaptivePrimaryInk: root.widgetSemanticForeground(root.widgetPrimaryRole, root.accentBackdrop, 4.5)
-    readonly property color adaptiveSecondaryInk: root.widgetSemanticForeground(root.widgetSecondaryRole, root.accentBackdrop, 4.5)
-    readonly property color adaptiveDetailInk: root.widgetSemanticForeground(root.widgetTertiaryRole, root.accentBackdrop, 4.5)
-    readonly property color adaptiveRuleInk: root.widgetSemanticForeground(root.widgetTertiaryRole, root.accentBackdrop, 3.0)
+    readonly property color adaptivePrimaryInk: root.widgetSemanticForeground(root.adaptivePrimaryRole, root.accentBackdrop, 4.5)
+    readonly property color adaptiveSecondaryInk: root.widgetSemanticForeground(root.adaptiveSecondaryRole, root.accentBackdrop, 4.5)
+    readonly property color adaptiveDetailInk: root.widgetSemanticForeground(root.adaptiveTertiaryRole, root.accentBackdrop, 4.5)
+    readonly property color adaptiveRuleInk: root.widgetSemanticForeground(root.adaptiveTertiaryRole, root.accentBackdrop, 3.0)
     readonly property color adaptiveSealInk: root.widgetSemanticForeground(root.widgetSignalRole, root.accentBackdrop, 3.0)
 
     readonly property color leadInk: root._roleColor(
