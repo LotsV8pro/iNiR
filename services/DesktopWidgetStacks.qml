@@ -81,9 +81,12 @@ Singleton {
         return map
     }
 
-    // stack id -> { key, dir, serial }: the page shown. Runtime only.
+    // stack id -> { key, dir, serial }: the page shown. Runtime only, and keyed by output: two screens showing the
+    // same stack can sit on different pages, turned independently.
     property var pages: ({})
     property var hovering: ({})
+    // Bumped whenever any page turns, so each stack's rotation timer restarts after a hand gesture.
+    property int pageRevision: 0
     // widget key -> { sizes, size, faced }: what each loaded widget says about itself.
     property var reported: ({})
     // widgets that just left a stack; the canvas finds them a free spot beside it.
@@ -118,17 +121,57 @@ Singleton {
         return DesktopWidgetLayout.enabled(output, key, Config.getNestedValue("background.widgets." + key + ".enable", false))
     }
 
-    function pagesOn(output: string, id: string): var {
-        void Config.revision
+    // The page order on one output: the stack's own list unless this screen reordered it. It is kept per output, so
+    // moving a page up on one screen leaves the other screen's order as it was.
+    function orderOn(output: string, id: string): var {
         const stack = root.stackById(id)
         if (!stack)
             return []
-        return stack.members.filter(key => root._isEnabled(output, key))
+        // Config hands these lists back as array-like objects, not JS arrays: Array.from normalizes them.
+        const stored = Array.from(DesktopWidgetLayout.widgetOverride(output, root.prefix + id)?.order ?? [])
+        const base = stack.members
+        if (stored.length === 0)
+            return Array.from(base)
+        const out = []
+        for (const key of stored)
+            if (base.indexOf(key) >= 0 && out.indexOf(key) < 0)
+                out.push(key)
+        // A page added after this screen last reordered goes last; one taken away is simply gone.
+        for (const key of base)
+            if (out.indexOf(key) < 0)
+                out.push(key)
+        return out
+    }
+
+    // stack id + output -> the pages that output shows, rebuilt only when the config changes. The faces ask for this
+    // many times per frame and used to rebuild the arrays each time. Its fields are mutated in place on purpose: a
+    // property write during a binding (a rotation timer reads this) would be a binding loop.
+    property var _pagesCache: ({ revision: -1, pages: ({}) })
+
+    function pagesOn(output: string, id: string): var {
+        void Config.revision
+        const cache = root._pagesCache
+        if (cache.revision !== Config.revision) {
+            cache.revision = Config.revision
+            cache.pages = ({})
+        }
+        const key = root._pageKey(output, id)
+        if (cache.pages[key] === undefined)
+            cache.pages[key] = root.orderOn(output, id).filter(name => root._isEnabled(output, name))
+        return cache.pages[key]
+    }
+
+    function _pageKey(output: string, id: string): string {
+        return String(output ?? "") + "::" + String(id ?? "")
+    }
+
+    function _pageEntry(output: string, id: string): var {
+        return root.pages[root._pageKey(output, id)] ?? null
     }
 
     function shownKey(output: string, id: string): string {
         const list = root.pagesOn(output, id)
-        const key = root.pages[id]?.key
+        const key = root._pageEntry(output, id)?.key
         return list.indexOf(key) >= 0 ? key : (list[0] ?? "")
     }
 
@@ -143,7 +186,8 @@ Singleton {
         if (list.length < 2 || list.indexOf(widgetKey) < 0)
             return null
         const stack = root.stackById(id)
-        const shown = root.shownKey(output, id)
+        const page = root._pageEntry(output, id)
+        const shown = list.indexOf(page?.key) >= 0 ? page.key : (list[0] ?? "")
         return {
             id: id,
             index: list.indexOf(widgetKey),
@@ -151,8 +195,8 @@ Singleton {
             count: list.length,
             shown: shown === widgetKey,
             shownIndex: list.indexOf(shown),
-            dir: root.pages[id]?.dir ?? 1,
-            serial: root.pages[id]?.serial ?? 0,
+            dir: page?.dir ?? 1,
+            serial: page?.serial ?? 0,
             rotate: stack.rotate,
             interval: stack.interval,
             sizes: root.commonSizes(id),
@@ -214,10 +258,12 @@ Singleton {
 
     // ── Paging ─────────────────────────────────────────────────────────────
 
-    function _page(id: string, key: string, dir: int): void {
+    function _page(output: string, id: string, key: string, dir: int): void {
+        const at = root._pageKey(output, id)
         const now = Object.assign({}, root.pages)
-        now[id] = { key: key, dir: dir, serial: (root.pages[id]?.serial ?? 0) + 1 }
+        now[at] = { key: key, dir: dir, serial: (root.pages[at]?.serial ?? 0) + 1 }
         root.pages = now
+        root.pageRevision++
     }
 
     function step(output: string, id: string, delta: int): bool {
@@ -226,7 +272,7 @@ Singleton {
             return false
         const from = Math.max(0, list.indexOf(root.shownKey(output, id)))
         const to = ((from + delta) % list.length + list.length) % list.length
-        root._page(id, list[to], delta >= 0 ? 1 : -1)
+        root._page(output, id, list[to], delta >= 0 ? 1 : -1)
         return true
     }
 
@@ -237,15 +283,16 @@ Singleton {
             return false
         const from = list.indexOf(root.shownKey(output, id))
         if (from !== to)
-            root._page(id, key, to > from ? 1 : -1)
+            root._page(output, id, key, to > from ? 1 : -1)
         return true
     }
 
-    function setHovered(id: string, on: bool): void {
-        if (Boolean(root.hovering[id]) === on)
+    function setHovered(output: string, id: string, on: bool): void {
+        const at = root._pageKey(output, id)
+        if (Boolean(root.hovering[at]) === on)
             return
         const now = Object.assign({}, root.hovering)
-        now[id] = on
+        now[at] = on
         root.hovering = now
     }
 
@@ -262,19 +309,23 @@ Singleton {
         }
     }
 
-    function _rotatingOutput(stack: var): string {
-        if (!root.live || !stack.rotate || GlobalStates.widgetEditMode || root.hovering[stack.id])
-            return ""
+    // Every output that may turn this stack: the pages of one screen turn without dragging the other along.
+    function _rotatingOutputs(stack: var): var {
+        if (!root.live || !stack.rotate || GlobalStates.widgetEditMode)
+            return []
         const screens = Quickshell.screens
+        const out = []
         for (let i = 0; i < screens.length; ++i) {
             const name = String(screens[i]?.name ?? "")
             // Turning pages nobody can see is a redraw for nothing.
+            if (name.length === 0 || root.hovering[root._pageKey(name, stack.id)])
+                continue
             if (root.pagesOn(name, stack.id).length >= 2 && WidgetPowerManager.widgetsActiveForOutput(name)
                     && Wallpapers.videoMotionAllowedOn(name)
                     && !(CompositorService.isNiri && NiriService.activeWorkspaceCovers(name)))
-                return name
+                out.push(name)
         }
-        return ""
+        return out
     }
 
     Instantiator {
@@ -282,12 +333,15 @@ Singleton {
         delegate: Timer {
             id: rotation
             required property var modelData
-            readonly property string output: root._rotatingOutput(rotation.modelData)
+            readonly property var outputs: root._rotatingOutputs(rotation.modelData)
             interval: rotation.modelData.interval * 1000
             repeat: true
-            running: rotation.output.length > 0
-            onTriggered: root.step(rotation.output, rotation.modelData.id, 1)
-            readonly property int serial: root.pages[rotation.modelData.id]?.serial ?? 0
+            running: rotation.outputs.length > 0
+            onTriggered: {
+                for (const output of rotation.outputs)
+                    root.step(output, rotation.modelData.id, 1)
+            }
+            readonly property int serial: root.pageRevision
             // A page turned by hand or by selection starts the wait again.
             onSerialChanged: if (rotation.running) rotation.restart()
         }
@@ -356,7 +410,9 @@ Singleton {
         Config.setNestedValue("background.widgets.stacks", list)
         for (const name of members)
             root._ownDesign(name)
-        root._page(id, anchor, 1)
+        // Every screen starts on the anchor, each with its own page state so they can be turned apart.
+        for (const output of root._outputs())
+            root._page(output, id, anchor, 1)
         Qt.callLater(() => root._fitSize(id))
         return id
     }
@@ -438,8 +494,9 @@ Singleton {
         } else {
             root._patch(stack.id, { members: rest })
             root._release(stack.id, key, aside)
-            if (root.pages[stack.id]?.key === key)
-                root._page(stack.id, rest[0], 1)
+            for (const output of root._outputs())
+                if (root._pageEntry(output, stack.id)?.key === key)
+                    root._page(output, stack.id, rest[0], 1)
         }
         return true
     }
@@ -481,8 +538,12 @@ Singleton {
 
     function _dropStack(id: string): void {
         Config.setNestedValue("background.widgets.stacks", root.stacks.filter(stack => stack.id !== id))
+        // The page state is keyed by output, so drop every screen's entry for this stack.
+        const suffix = "::" + id
         const now = Object.assign({}, root.pages)
-        delete now[id]
+        for (const at of Object.keys(now))
+            if (at.endsWith(suffix))
+                delete now[at]
         root.pages = now
     }
 
@@ -491,19 +552,26 @@ Singleton {
             DesktopWidgetLayout.clearWidget(output, root.prefix + id)
     }
 
-    function move(id: string, key: string, delta: int): bool {
+    function move(output: string, id: string, key: string, delta: int): bool {
         const stack = root.stackById(id)
         if (!stack)
             return false
-        const from = stack.members.indexOf(key)
+        const order = root.orderOn(output, id)
+        // The arrows walk the pages this screen shows: a member hidden here must not swallow the step.
+        const pages = root.pagesOn(output, id)
+        const from = pages.indexOf(key)
         const to = from + delta
-        if (from < 0 || to < 0 || to >= stack.members.length)
+        if (from < 0 || to < 0 || to >= pages.length)
             return false
-        const members = stack.members.slice()
-        members.splice(from, 1)
-        members.splice(to, 0, key)
-        root._patch(id, { members: members })
-        return true
+        const target = pages[to]
+        const a = order.indexOf(key)
+        const b = order.indexOf(target)
+        if (a < 0 || b < 0)
+            return false
+        order[a] = target
+        order[b] = key
+        // Only this screen's record changes; the other outputs keep their own order.
+        return DesktopWidgetLayout.setValue(output, root.prefix + id, "order", order)
     }
 
     function setRotate(id: string, on: bool): bool {
@@ -527,6 +595,11 @@ Singleton {
             stacks: root.stacks.map(stack => ({
                 id: stack.id, members: stack.members, rotate: stack.rotate, interval: stack.interval,
                 sizes: root.commonSizes(stack.id), size: stack.size,
+                // Per screen, its own order and the page it shows: two screens can differ in both.
+                pages: names.reduce((all, name) => {
+                    all[name] = root.pagesOn(name, stack.id)
+                    return all
+                }, ({})),
                 shown: names.reduce((all, name) => {
                     all[name] = root.shownKey(name, stack.id)
                     return all
@@ -569,9 +642,10 @@ Singleton {
                 return root.step(output, stack, to === "next" ? 1 : -1) ? root.shownKey(output, stack) : "no such stack"
             return root.show(output, stack, to) ? to : "not a page of that stack"
         }
-        /// Move a page earlier (`-1`) or later (`1`) in the order
+        /// Move a page earlier (`-1`) or later (`1`) in the order on the focused screen
         function move(stack: string, widget: string, delta: int): string {
-            return root.move(stack, widget, delta) ? "moved" : "not moved"
+            const output = String(GlobalStates.focusedScreen?.name ?? Quickshell.screens[0]?.name ?? "")
+            return root.move(output, stack, widget, delta) ? "moved" : "not moved"
         }
         /// `on` or `off`: the stack turns its own pages
         function rotate(stack: string, mode: string): string {

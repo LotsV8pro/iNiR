@@ -711,7 +711,12 @@ AbstractWidget {
     // (his 10-30: light ink vanished on a white wallpaper with adaptation off). The switches keep their colours. A
     // widget with no plate reads it whether it asked or not: the image converter's captions took the scheme's ink and
     // went dark on a dark mountain in light mode.
-    readonly property bool _regionSampling: root.needsColText || root.look.readsRegion(root) || (!root.widgetHasSurface && !root.familyFaced)
+    // A widget wearing the wallpaper palette always reads its own region, even with a plate: the accent comes from the
+    // colours under it, so the reading cannot wait for a widget that would otherwise never ask for one.
+    readonly property bool widgetWantsWallpaperPalette: [root.widgetPrimaryRole, root.widgetSecondaryRole,
+        root.widgetTertiaryRole, root.widgetSignalRole].some(role => String(role).startsWith("wallpaper"))
+    readonly property bool _regionSampling: root.needsColText || root.look.readsRegion(root)
+        || root.widgetWantsWallpaperPalette || (!root.widgetHasSurface && !root.familyFaced)
     readonly property bool positionColorAdaptationEnabled: root.look.adaptsToWallpaper
     property color dominantColor: Appearance.colors.colPrimary
     // Wallpaper region brightness (0-1, gamma-encoded luma). -1 = not yet analyzed.
@@ -817,6 +822,7 @@ AbstractWidget {
 
     readonly property var widgetPalettePresets: [
         { value: "balanced", label: Translation.tr("Default"), roles: ["primary", "secondary", "tertiary"] },
+        { value: "wallpaper", label: Translation.tr("Wallpaper"), roles: ["wallpaper", "wallpaperSoft", "wallpaperDeep"] },
         { value: "primary", label: Translation.tr("Primary"), roles: ["primary", "primary", "primary"] },
         { value: "secondary", label: Translation.tr("Secondary"), roles: ["secondary", "secondary", "secondary"] },
         { value: "tertiary", label: Translation.tr("Tertiary"), roles: ["tertiary", "tertiary", "tertiary"] }
@@ -824,6 +830,8 @@ AbstractWidget {
 
     function widgetPalettePresetSpec(preset: string): var {
         switch (preset) {
+        case "wallpaper":
+            return { primary: "wallpaper", secondary: "wallpaperSoft", tertiary: "wallpaperDeep", signal: "signal", surface: "surface" };
         case "primary":
             return { primary: "primary", secondary: "primary", tertiary: "primary", signal: "signal", surface: "surface" };
         case "secondary":

@@ -104,7 +104,45 @@ QtObject {
     function plateColor(widget: var): color { return widget.widgetSemanticContainer(widget.widgetSurfaceRole) }
 
     // What a palette role resolves to: { color, onColor, container, onContainer }.
-    function semanticSet(widget: var, role: string): var { return plainSet(widget, role) }
+    function semanticSet(widget: var, role: string): var {
+        return String(role).startsWith("wallpaper") ? wallpaperSet(widget, role) : plainSet(widget, role)
+    }
+    // The wallpaper-region palette: the accent is the colour the wallpaper shows under the widget itself, so a widget on
+    // a grey patch takes grey, one on a sunset takes its orange. Only lightness moves, and only as far as the region
+    // needs for the ink to read: a flat region gives three steps of its own tone, never an invented hue.
+    function wallpaperSet(widget: var, role: string): var {
+        const known = Boolean(widget._hasBrightness) && widget._regionBg !== undefined
+        // Until the wallpaper under this widget is read (the preview and its grid take a moment after a restart), stand
+        // on the family's unread ink, never on the wallpaper's global dominant: that one belongs to another part of the
+        // picture and showed a teal clock on a grey patch until the widget was moved.
+        const region = Qt.color(known ? widget.dominantColor : base.unreadInk)
+        const backdrop = known ? Qt.color(widget._regionBg) : Appearance.colors.colLayer0
+        // The region's own brightness decides the polarity, not the forced ink mode: a dark patch takes a light accent
+        // even when the widget's text is forced dark.
+        const lightRegion = known && Number(widget.regionLuminance) >= 0.18
+        const toward = lightRegion ? base.inkDark : base.inkLight
+        // A near-black (or near-white) patch has no trustworthy hue: its few units of channel spread turn into a strong
+        // tint once lightness moves, which is why the grey clock came out teal. Its hue is only kept when there is chroma.
+        const chroma = Math.max(region.r, region.g, region.b) - Math.min(region.r, region.g, region.b)
+        const hue = chroma >= 0.06 ? region.hslHue : 0
+        const saturation = chroma >= 0.06 ? region.hslSaturation : 0
+        // Soft sits closest to the backdrop, deep furthest: the pair keeps a hierarchy on a single-tone region.
+        const anchor = role === "wallpaperSoft" ? (lightRegion ? 0.44 : 0.66)
+            : role === "wallpaperDeep" ? (lightRegion ? 0.22 : 0.88)
+            : (lightRegion ? 0.31 : 0.78)
+        const seed = Qt.hsla(hue, saturation, anchor, 1)
+        const color = ColorUtils.readableAccentInk(seed, backdrop, role === "wallpaperSoft" ? 3.0 : 4.5, toward)
+        // The container is the same tone held back toward the region: PixelClock paints whole glyphs with it, so it must
+        // stay visible on the wallpaper (a plate-coloured container left half the digits black on black).
+        const container = ColorUtils.readableAccentInk(
+            Qt.hsla(hue, saturation, lightRegion ? 0.58 : 0.55, 1), backdrop, 2.2, toward)
+        return {
+            color: color,
+            onColor: lightRegion ? base.inkLight : base.inkDark,
+            container: container,
+            onContainer: ColorUtils.readableAccentInk(color, container, 3.0, toward)
+        }
+    }
     function plainSet(widget: var, role: string): var {
         const c = Appearance.colors
         // Bare on a light region in a dark theme, an accent takes its container tone: the same

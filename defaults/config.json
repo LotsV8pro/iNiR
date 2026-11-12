@@ -932,6 +932,12 @@
             "refreshMinutes": 15,
             "sources": []
         },
+        "googleOAuth": {
+            "clientId": "",
+            "clientSecret": "",
+            "pushEnabled": false,
+            "importDays": 365
+        },
         "showUpcoming": true,
         "upcomingDays": 3
     },

@@ -152,7 +152,9 @@ Singleton {
         const next = Object.assign({}, root.arrivals)
         next[output + "::" + key] = { at: at, from: from, glide: Boolean(glide) }
         root.arrivals = next
-        DesktopWidgetLayout.setGloballyEnabled(key, true)
+        // Per screen: taking a widget from the shelf puts it on the screen it was dropped on, not on every screen.
+        // Settings' switch still turns a widget on or off everywhere (setGloballyEnabled, which clears these).
+        DesktopWidgetLayout.setEnabled(output, key, true)
     }
     function arrival(output: string, key: string): var { return root.arrivals[output + "::" + key] ?? null }
     function arrived(output: string, key: string): void {
@@ -174,8 +176,10 @@ Singleton {
         onTriggered: {
             const gone = Object.keys(root.departures)
             root.departures = ({})
-            for (const id of gone)
-                DesktopWidgetLayout.setGloballyEnabled(id.slice(id.indexOf("::") + 2), false)
+            for (const id of gone) {
+                const at = id.indexOf("::")
+                DesktopWidgetLayout.setEnabled(id.slice(0, at), id.slice(at + 2), false)
+            }
         }
     }
 

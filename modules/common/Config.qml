@@ -13,7 +13,11 @@ Singleton {
     property bool ready: false
     property int revision: 0
     property bool isSettingsProcess: (Quickshell.env("INIR_STANDALONE_WINDOW") ?? "") === "1"
-    property int readWriteDelay: 50 // milliseconds
+    // Debounce for the write to disk. The in-memory value changes immediately
+    // (live preview stays instant), but the file is only rewritten once the
+    // user stops changing things. At 50 ms a slider drag rewrote the whole
+    // ~157 KB config up to 20 times a second.
+    property int readWriteDelay: 400 // milliseconds
     property bool blockWrites: false
     // Custom widget data stored outside JsonAdapter to avoid VME crash on property var
     property var customWidgetData: ({})
