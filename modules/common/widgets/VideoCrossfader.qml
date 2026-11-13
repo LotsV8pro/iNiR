@@ -135,6 +135,8 @@ Item {
     function _relap(): void {
         const active = root._activePlayer()
         if (root._loadingSource || !String(active.source)) return
+        console.log("[bg-debug] video relap", root.source, "at", new Date().toTimeString().slice(0, 8),
+            "size:", root.width + "x" + root.height, "decode:", root.decodeHeight, "report:", root.reportFrames)
         root._relapping = true
         root._loadingSource = String(active.source)
         root._inactivePlayer().source = root._loadingSource
