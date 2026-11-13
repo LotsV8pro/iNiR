@@ -47,7 +47,10 @@ version of the song.
 **The video wallpaper has its own still underneath.** While the two video slots
 blend, their opacities do not add up to one, and the gap used to show whatever
 sat under the surface. The clip's first frame now sits under the player, and
-`awww` paints that still on the output instead of skipping it.
+`awww` paints that still on the output instead of skipping it. That still used
+to be what the widget palette seeded from, so the hue under the widgets stayed
+on the first frame; a pixel read of the frame on screen every twenty seconds
+now feeds the palette, and the colour moves with the clip.
 
 **Google Calendar.** The calendar reads Google over OAuth (loopback redirect,
 or the device code from a terminal): its events join the iCal feeds, contacts
@@ -55,7 +58,9 @@ offer names and birthdays when you write one, and a new event can be pushed
 back to Google. Contacts live in their own cache so the composer does not walk
 the whole calendar on each keystroke. It is off until you put your own OAuth
 client in `calendar.googleOAuth` (`clientId`, `clientSecret`, `pushEnabled`,
-`importDays`); then `inir ipc calendar authorize` opens the browser once.
+`importDays`); the card in Settings › Sources › Calendar takes the client,
+starts the sign-in and shows the code, and `inir ipc calendar authorize` does
+the same from a terminal.
 
 **The recorder picks its device.** Under the audio mode there is a row for the
 microphone and another for the system sound, each opening the mixer's list over
