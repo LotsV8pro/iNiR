@@ -392,6 +392,93 @@ Singleton {
         return root.videoPauseMode !== "covered" || !(CompositorService.isNiri && output.length > 0 && NiriService.activeWorkspaceCovers(output))
     }
 
+    // ── Moving seed ──────────────────────────────────────────────────────
+    // The widget palette seeds from the mean colour of the wallpaper, and for a video that colour comes from the
+    // still cached beside it, which is the clip's first frame: the hue under the widgets never moved with it. The
+    // background says where the clip is playing; a one-pixel read of that frame every 20 s is what the palette seeds
+    // from instead. Cheap on purpose: 1x1, no audio, one seek.
+    property var videoSeeds: ({})      // output -> { path, colour }
+    property var _videoPositions: ({}) // output -> { at, ms }; a plain map, no binding should wake for it
+    property var _seedQueue: []
+    property var _seedQueued: ({})
+    property bool _seedBusy: false
+
+    function noteVideoPosition(output: string, ms: real): void {
+        const name = String(output ?? "")
+        if (name.length === 0 || !(ms > 0)) return
+        root._videoPositions[name] = { at: Date.now(), ms: ms }
+    }
+
+    // The hue a playing clip shows on this output, empty when it shows a picture or has not been read yet.
+    function movingSeed(output: string): string {
+        const entry = root.videoSeeds[output]
+        if (!entry || entry.path !== root.desktopWallpaperPath(output)) return ""
+        return String(entry.colour)
+    }
+
+    function _queueVideoSeeds(): void {
+        const now = Date.now()
+        for (const output of Object.keys(root._videoPositions)) {
+            const seen = root._videoPositions[output]
+            // A clip that stopped reporting is paused, covered or gone; its last colour still describes what is drawn.
+            if (!seen || now - seen.at > 120000) continue
+            const path = root.desktopWallpaperPath(output)
+            if (!root.isVideoFile(path)) continue
+            if (root._seedQueued[output] === path) continue
+            root._seedQueued[output] = path
+            root._seedQueue.push({ output: output, path: path, ms: seen.ms })
+        }
+        if (!root._seedBusy && root._seedQueue.length > 0) root._startVideoSeed()
+    }
+
+    function _startVideoSeed(): void {
+        const job = root._seedQueue.shift()
+        if (!job) {
+            root._seedBusy = false
+            return
+        }
+        root._seedBusy = true
+        seedProc._job = job
+        seedProc.command = ["sh", "-c",
+            'ffmpeg -hide_banner -loglevel error -ss "$2" -an -i "$1" -frames:v 1 '
+            + '-vf scale=1:1:flags=area,format=rgb24 -f rawvideo - | od -An -tu1',
+            "sh", job.path, (job.ms / 1000).toFixed(2)]
+        seedProc.running = true
+    }
+
+    function _storeVideoSeed(job: var, text: string): void {
+        if (!job || job.path !== root.desktopWallpaperPath(job.output)) return
+        const parts = String(text ?? "").trim().split(/\s+/)
+        if (parts.length < 3) return
+        // Steps of 8: a channel moving by a unit is not a new hue, and a new hue rebuilds every widget's colours.
+        const channel = value => Math.round(Math.max(0, Math.min(255, Number(value) || 0)) / 8) * 8 / 255
+        const copy = Object.assign({}, root.videoSeeds)
+        copy[job.output] = { path: job.path, colour: Qt.rgba(channel(parts[0]), channel(parts[1]), channel(parts[2]), 1) }
+        root.videoSeeds = copy
+    }
+
+    Timer {
+        interval: 20000
+        repeat: true
+        running: true
+        onTriggered: root._queueVideoSeeds()
+    }
+
+    Process {
+        id: seedProc
+        property var _job: null
+        // od prints the three bytes as decimal text, one line per read.
+        stdout: SplitParser {
+            onRead: data => root._storeVideoSeed(seedProc._job, data)
+        }
+        onExited: (exitCode) => {
+            if (seedProc._job) delete root._seedQueued[seedProc._job.output]
+            seedProc._job = null
+            root._seedBusy = false
+            if (root._seedQueue.length > 0) root._startVideoSeed()
+        }
+    }
+
     // ── Video first-frame system ──────────────────────────────────────────
     // Generates and caches first-frame JPGs for video wallpapers
     readonly property string _videoThumbDir: {

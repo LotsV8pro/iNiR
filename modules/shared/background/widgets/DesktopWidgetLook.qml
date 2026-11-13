@@ -26,10 +26,13 @@ Singleton {
         if (seed.length === 0) return base
         return root.viewFor(base, output, seed)
     }
-    // The mean colour of the picture an output draws, read from the grid the desktop widgets already keep.
+    // The mean colour of the picture an output draws, read from the grid the desktop widgets already keep. A clip's
+    // still is its first frame, so a video that plays seeds from the frame on screen instead.
     function screenSeed(output: string): string {
         const screen = Quickshell.screens.find(s => s.name === output)
         if (!screen) return ""
+        const moving = Wallpapers.movingSeed(output)
+        if (moving.length > 0) return moving
         const sample = Lume.read(output, 0, 0, screen.width, screen.height)
         return sample ? String(Qt.color(sample.color)) : ""
     }

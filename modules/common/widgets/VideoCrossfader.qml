@@ -66,6 +66,12 @@ Item {
     }
 
     function _activePlayer(): var { return root.activeSlot === 0 ? playerA : playerB }
+    // Where the clip on screen is, in milliseconds. A still is only the clip's first frame; anything that wants the
+    // colour under a playing video asks here and samples the clip there.
+    function currentPosition(): double {
+        const player = root._activePlayer()
+        return player ? Number(player.position ?? 0) : 0
+    }
     function _inactivePlayer(): var { return root.activeSlot === 0 ? playerB : playerA }
 
     // Deferred: on creation the decode height settles a moment after the source (0, "play the file", then the

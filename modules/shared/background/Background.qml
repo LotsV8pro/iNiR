@@ -1804,6 +1804,16 @@ Scope {
                         samples: Math.min(33, radius * 2 + 1)
                     }
                 }
+
+                // The widget palette seeds from the wallpaper's mean colour, and a video's still is only its first
+                // frame: this is where the clip is, while it plays, so the seed can follow the picture on screen.
+                // A paused clip keeps reporting nothing and the palette keeps the colour it was left on.
+                Timer {
+                    interval: 5000
+                    repeat: true
+                    running: videoWallpaper.visible && videoWallpaper.shouldPlay
+                    onTriggered: Wallpapers.noteVideoPosition(bgRoot.screenName, videoWallpaper.currentPosition())
+                }
             }
 
             // The family's texture over the wallpaper (its parts `wallpaper.leak`, `wallpaper.afterglow`).
