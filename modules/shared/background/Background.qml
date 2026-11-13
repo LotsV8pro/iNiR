@@ -201,31 +201,6 @@ Scope {
             }
             return JSON.stringify(out)
         }
-        // Which page of each stack sits on top, per screen: { stackId: { output: { shown, keys, serial } } }.
-        function _stackPagesJson(): string {
-            const out = {}
-            for (const entry of DesktopWidgetStacks.stacks) {
-                const perOutput = {}
-                for (const screen of Quickshell.screens) {
-                    const screenName = String(screen?.name ?? "")
-                    if (screenName.length === 0)
-                        continue
-                    const info = DesktopWidgetStacks.info(screenName, entry.members[0])
-                    perOutput[screenName] = info
-                        ? { shown: DesktopWidgetStacks.shownKey(screenName, entry.id), keys: info.keys, serial: info.serial }
-                        : null
-                }
-                out[entry.id] = perOutput
-            }
-            return JSON.stringify(out)
-        }
-        /// Report each stack's page on every screen as JSON
-        function stackPages(): string { return _stackPagesJson() }
-        /// Turn one screen's page: `next` or `prev`. The other screens stay where they are.
-        function stackPageStep(output: string, stack: string, action: string): string {
-            DesktopWidgetStacks.step(String(output ?? "").trim(), String(stack ?? "").trim(), action === "prev" ? -1 : 1)
-            return _stackPagesJson()
-        }
         // The options the widget's Options page shows now (what Settings has for it), with their values:
         // [{ key, kind, label, value, choices?, min?, max? }].
         /// The options a widget's Options page shows now, with their values, as JSON
@@ -637,8 +612,7 @@ Scope {
         visible: GlobalStates.screenLocked
             || !hasFullscreenWindow
             || !(Config.options?.background?.hideWhenFullscreen ?? false)
-        onVisibleChanged: console.log("[bg-debug] background surface", screenName, visible ? "mapped" : "unmapped",
-            "fullscreen:", hasFullscreenWindow, "locked:", GlobalStates.screenLocked)
+
 
         // Workspaces
         property HyprlandMonitor monitor: CompositorService.isHyprland ? Hyprland.monitorFor(modelData) : null
@@ -1785,9 +1759,6 @@ Scope {
                     visible: opacity > 0 && !blurLoader.active && !bgRoot.backdropActive
                         && (bgRoot.wallpaperIsVideo || bgRoot._outgoingVideo.length > 0)
                     opacity: bgRoot.wallpaperIsVideo || videoHandoff.running ? 1 : 0
-                    onVisibleChanged: console.log("[bg-debug] video layer visible:", visible, "opacity:", opacity,
-                        "blur:", blurLoader.active, "backdrop:", bgRoot.backdropActive, "screen:", bgRoot.screenName)
-                    onSourceChanged: if (!source) console.log("[bg-debug] video source cleared on", bgRoot.screenName)
                     onOpacityChanged: if (opacity === 0 && !bgRoot.wallpaperIsVideo) bgRoot._outgoingVideo = ""
                     Behavior on opacity {
                         enabled: Appearance.animationsEnabled
