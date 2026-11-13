@@ -111,15 +111,19 @@ leaves the tree as it was.
 
 ## Known limits
 
-- A few marks inside the hub plugin (the "today" of the calendar and the clock,
-  the stack chips, the borders of the quick controls) still read the session
-  accent, so they follow the screen in use. They are not visible with the
-  widgets this desktop uses; making them exact needs a patch to the plugin,
-  which an update would overwrite.
-- On the screen with the video wallpaper, the seed comes from the cached first
-  frame, not from the moving clip. It is the same limit the region colours had.
-- The Google Calendar connection has no button in Settings yet: it is configured
-  in the JSON and authorised from a terminal.
+- The hub plugin is not in git: the installer writes
+  `~/.local/share/inir/plugins/iris` and every update replaces the whole
+  folder. This fork's changes to it (the per-screen accent and the Google card
+  in Settings) live in `scripts/hub-patches.py`, and `inir run` applies them
+  before the shell loads the plugin. If the hub moves a line one of the patches
+  was cut from, that patch is skipped and reported rather than written blind;
+  `python3 scripts/hub-patches.py --check` names it, and the fix is to update
+  its anchor.
+- With a video wallpaper the widget palette seeds from one pixel of the frame
+  on screen, read with ffmpeg every twenty seconds: the colour can trail the
+  clip by that much, and each read costs a fraction of a second of CPU. The
+  sample is rounded to steps of eight per channel, so the palette is not
+  rebuilt for a change no one can see.
 - The recorder lists the devices `pactl` reports; a device that appears while
   the panel is open shows up within eight seconds.
 
