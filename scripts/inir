@@ -490,6 +490,17 @@ require_qs() {
     fi
 }
 
+# The hub owns ~/.local/share/inir/plugins/iris and rewrites it on every update, so this fork's changes there live in
+# scripts/hub-patches.py and are re-applied here. Before the shell loads the plugin, never while it runs: a plugin
+# written under a live shell makes Quickshell hot-reload a half-built tree and drop windows.
+apply_hub_patches() {
+    local script="$config_dir/scripts/hub-patches.py"
+    [[ -x "$script" ]] || return 0
+    if ! python3 "$script" --quiet; then
+        echo "iNiR: a change to the iRiS plugin no longer fits this version; 'python3 $script --check' says which one." >&2
+    fi
+}
+
 # --- Stale local Quickshell detection ---------------------------------------
 # Returns 0 and prints a message if a stale quickshell binary in ~/.local/bin
 # or /usr/local/bin shadows the system package. This is the #1 cause of
@@ -4555,6 +4566,7 @@ case "$command_name" in
             # Systemd manages lifecycle (Restart=on-failure) and I/O priority.
             _skip_running_detect=true
             resolve_config_dir
+            apply_hub_patches
             # Clean helpers orphaned by the previous supervised shell.
             cleanup_orphans
             apply_hot_reload_policy_for_dir "$config_dir"
@@ -4570,6 +4582,7 @@ case "$command_name" in
 
         # ── Normal run path (manual invocation) ──
         resolve_config_dir
+        apply_hub_patches
         apply_hot_reload_policy_for_dir "$config_dir"
         apply_shell_scale
         apply_qt_runtime_env
