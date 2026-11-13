@@ -287,12 +287,22 @@ Singleton {
         return true
     }
 
-    function setHovered(output: string, id: string, on: bool): void {
+    // A hold on a stack pauses its turning. Called with (output, id, on); the face's hold arrives as (id, on), and then
+    // it pauses the stack on every screen that shows it (the old hover was global, and holding a page is momentary).
+    function setHovered(output: string, id: string, on: var): void {
+        // The second argument is a stack id in one shape and the hold itself in the other.
+        if (typeof id === "boolean") {
+            const held = id
+            for (const name of root._outputs())
+                if (root.pagesOn(name, output).length > 0)
+                    root.setHovered(name, output, held)
+            return
+        }
         const at = root._pageKey(output, id)
         if (Boolean(root.hovering[at]) === on)
             return
         const now = Object.assign({}, root.hovering)
-        now[at] = on
+        now[at] = Boolean(on)
         root.hovering = now
     }
 
@@ -552,7 +562,24 @@ Singleton {
             DesktopWidgetLayout.clearWidget(output, root.prefix + id)
     }
 
-    function move(output: string, id: string, key: string, delta: int): bool {
+    // The face's quick controls still call move(id, key, delta) without naming a screen (the hub panel is rewritten by
+    // updates, so the service keeps answering that call). The arrows then act on the screen whose pages hold that
+    // widget, the one in use first: the stack they are drawn in is the one they move.
+    function _moveOutputFor(id: string, key: string): string {
+        const focused = String(GlobalStates.focusedScreen?.name ?? "")
+        const rest = root._outputs().filter(name => name !== focused)
+        for (const name of (focused.length > 0 ? [focused].concat(rest) : rest))
+            if (root.pagesOn(name, id).indexOf(key) >= 0)
+                return name
+        return focused.length > 0 ? focused : (rest[0] ?? "")
+    }
+
+    function move(output: string, id: string, key: var, delta: var): bool {
+        // The third argument tells the shapes apart: a page key here, the step in the old call.
+        if (typeof key === "number") {
+            const at = root._moveOutputFor(output, String(id ?? ""))
+            return at.length > 0 ? root.move(at, output, id, Number(key)) : false
+        }
         const stack = root.stackById(id)
         if (!stack)
             return false
