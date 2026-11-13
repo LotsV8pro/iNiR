@@ -637,6 +637,8 @@ Scope {
         visible: GlobalStates.screenLocked
             || !hasFullscreenWindow
             || !(Config.options?.background?.hideWhenFullscreen ?? false)
+        onVisibleChanged: console.log("[bg-debug] background surface", screenName, visible ? "mapped" : "unmapped",
+            "fullscreen:", hasFullscreenWindow, "locked:", GlobalStates.screenLocked)
 
         // Workspaces
         property HyprlandMonitor monitor: CompositorService.isHyprland ? Hyprland.monitorFor(modelData) : null
@@ -1756,6 +1758,22 @@ Scope {
                     }
                 }
 
+                // The clip's own still, under the player: while the two slots
+                // blend their opacities do not add up to one, and every frame in
+                // between let whatever sat under this surface show through. With
+                // the same picture underneath, a loop's blend reads as motion
+                // instead of a hole.
+                Image {
+                    anchors.fill: parent
+                    visible: bgRoot.wallpaperIsVideo && bgRoot.enableAnimation
+                        && !bgRoot.backdropActive && !glyphsLoader.item
+                    source: visible ? Wallpapers.stillUrlFor(bgRoot.wallpaperPathRaw) : ""
+                    fillMode: Wallpapers.imageFillFor(bgRoot.fillMode)
+                    asynchronous: true
+                    cache: true
+                    smooth: true
+                }
+
                 // Video wallpaper (Qt Multimedia)
                 // Two-slot crossfader: a single Video tears down its pipeline on
                 // every source change, so switching between two videos went black
@@ -1767,6 +1785,9 @@ Scope {
                     visible: opacity > 0 && !blurLoader.active && !bgRoot.backdropActive
                         && (bgRoot.wallpaperIsVideo || bgRoot._outgoingVideo.length > 0)
                     opacity: bgRoot.wallpaperIsVideo || videoHandoff.running ? 1 : 0
+                    onVisibleChanged: console.log("[bg-debug] video layer visible:", visible, "opacity:", opacity,
+                        "blur:", blurLoader.active, "backdrop:", bgRoot.backdropActive, "screen:", bgRoot.screenName)
+                    onSourceChanged: if (!source) console.log("[bg-debug] video source cleared on", bgRoot.screenName)
                     onOpacityChanged: if (opacity === 0 && !bgRoot.wallpaperIsVideo) bgRoot._outgoingVideo = ""
                     Behavior on opacity {
                         enabled: Appearance.animationsEnabled

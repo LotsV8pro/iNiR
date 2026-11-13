@@ -356,11 +356,40 @@ Singleton {
             const familyOwnPath = multiMonitorEnabled ? "" : familyWallpaperPath
             const rawPath = familyOwnPath || ((monitorData && monitorData.path) ? monitorData.path : globalWallpaperPath)
             const cleanPath = FileUtils.trimFileProtocol(String(rawPath ?? ""))
+            if (WallpaperListener.isVideoPath(cleanPath)) {
+                const still = root._stillForVideo(cleanPath)
+                if (still.length > 0)
+                    result[monitorName] = still
+                continue
+            }
             if (!supportsMainWallpaper(cleanPath))
                 continue
             result[monitorName] = cleanPath
         }
         return result
+    }
+
+    // awww cannot play a clip, and skipping the output left whatever it painted
+    // days ago under the shell's own surface: any moment the video layer does not
+    // paint (hidden while a fullscreen window is up, or a blend between its two
+    // slots) showed that old picture. The clip's still keeps the output on the
+    // same wallpaper, so a gap is invisible.
+    function _stillForVideo(cleanPath: string): string {
+        if (!cleanPath) return ""
+        const frame = Wallpapers.getVideoFirstFramePath(cleanPath)
+        if (!frame) {
+            Qt.callLater(Wallpapers.ensureVideoFirstFrame, cleanPath)
+            return ""
+        }
+        return frame
+    }
+
+    // The still appears a moment after the video is applied; paint it then.
+    Connections {
+        target: Wallpapers
+        function onVideoFirstFramesChanged(): void {
+            root.scheduleSync()
+        }
     }
 
     function _signatureFor(map): string {
