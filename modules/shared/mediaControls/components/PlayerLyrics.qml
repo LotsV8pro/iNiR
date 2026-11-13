@@ -323,6 +323,7 @@ Item {
                     // The sung line: the phrase waits in the dim ink, the sung part lights above it.
                     KaraokeText {
                         id: karaokeBase
+                        line: lineRow
                         visible: lineRow.karaoke
                         color: root.waitingColor
                     }
