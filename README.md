@@ -62,6 +62,13 @@ client in `calendar.googleOAuth` (`clientId`, `clientSecret`, `pushEnabled`,
 starts the sign-in and shows the code, and `inir ipc calendar authorize` does
 the same from a terminal.
 
+**A calendar event is said in the Island.** Not a notification toast: the same
+line the microphone or a timer uses, beside the clock. It gives the event at the
+lead you choose in Settings (ten, five or one minute, a ring closing on the
+start) and again when its time comes, and the line keeps the next event with
+how long is left. An event kept by this desktop gets both; a feed's gets the
+lead marks from the same timer and the start from the end it carries.
+
 **The recorder picks its device.** Under the audio mode there is a row for the
 microphone and another for the system sound, each opening the mixer's list over
 the panel. `Default` follows whatever the mixer says when the recording starts;
