@@ -442,7 +442,8 @@ Singleton {
         powerPlug: "power-plug",
         powerUnplug: "power-unplug",
         pomodoroDone: "alarm-clock-elapsed",
-        timerDone: "alarm-clock-elapsed"
+        timerDone: "alarm-clock-elapsed",
+        calendarEvent: "complete"
     })
 
     // Sound names available in the current theme (feeds settings pickers)

@@ -1385,7 +1385,8 @@
             "powerPlug": "",
             "powerUnplug": "",
             "pomodoroDone": "",
-            "timerDone": ""
+            "timerDone": "",
+            "calendarEvent": ""
         }
     },
     "time": {

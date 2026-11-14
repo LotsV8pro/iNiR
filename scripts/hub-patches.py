@@ -343,7 +343,8 @@ PATCHES = [
     },
     # The lead marks were all it said: an event that begins got no notice of its own. It now says "Starting now" once,
     # when the clock reaches it, and the lead marks say how long is left instead of borrowing that sentence a minute
-    # early.
+    # early. It also rings when it takes the line, at the last lead mark and at the start, so a person away from the
+    # screen hears the event instead of having to look; alert sounds off turns the ring off with the rest.
     {
         "id": "island-event-start",
         "file": "bar/IrisIsland.qml",
@@ -367,6 +368,7 @@ PATCHES = [
                 if (now - entry.start > 45000 || root.eventSaid === started) return
                 root.eventSaid = started
                 root.showEvent("event", IrisStyle.danger, entry.title, Translation.tr("Starting now"), -1, "soon")
+                if (root.eventShown && (Config.options?.sounds?.notifications ?? true)) Audio.playEvent("calendarEvent")
                 return
             }
             const mark = [10, 5, 1].filter(at => at <= root.upcomingLead).find(at => entry.left <= at && entry.left > at - 1)
@@ -375,6 +377,7 @@ PATCHES = [
             root.eventSaid = key
             root.showEvent("event", IrisStyle.danger, entry.title,
                 Translation.tr("In %1 min").arg(entry.left), 1 - entry.left / root.upcomingLead, "soon")
+            if (mark <= 1 && root.eventShown && (Config.options?.sounds?.notifications ?? true)) Audio.playEvent("calendarEvent")
         }""",
         "summary": "an event says it starts when it does",
     },
