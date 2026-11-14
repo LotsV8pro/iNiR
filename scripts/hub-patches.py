@@ -316,6 +316,68 @@ PATCHES = [
         "new": "        border.color: IrisStyle.tintBorder(root.widget.look.accent)",
         "summary": "size grip in the widget accent",
     },
+    # A local event has no end, so nextEntry dropped it the moment its time arrived: the Island said "in 1 min" and
+    # then nothing, and an event created here never showed as started. A feed's event is still looked for first; one
+    # kept by this desktop covers the rest, counting as running for the minute it begins.
+    {
+        "id": "face-data-local-running",
+        "file": "widgets/IrisFaceData.qml",
+        "old": """        const here = new Date(at)
+        const running = Array.from(CalendarSync.getEventsForDate(here) ?? []).find(event => !event.allDay && event.endDate
+            && new Date(event.startDate).getTime() <= at && at < new Date(event.endDate).getTime())
+        if (running) {
+            const end = new Date(running.endDate).getTime()""",
+        "new": """        const here = new Date(at)
+        // A feed's event says when it ends; one this desktop keeps does not, and it counts as running for the minute it
+        // begins, so the Island can say it started instead of dropping it once its time arrives.
+        const running = Array.from(CalendarSync.getEventsForDate(here) ?? []).find(event => !event.allDay && event.endDate
+            && new Date(event.startDate).getTime() <= at && at < new Date(event.endDate).getTime())
+            ?? Array.from(Events.getAllEventsForDate(here) ?? []).find(event => !event.allDay
+                && root.eventDate(event).getTime() <= at && at < root.eventDate(event).getTime() + 60000)
+        if (running) {
+            const end = running.endDate ? new Date(running.endDate).getTime() : root.eventDate(running).getTime() + 60000
+            // A local event carries its time in dateTime; a feed's in startDate.
+            const began = running.startDate ? new Date(running.startDate).getTime() : root.eventDate(running).getTime()
+            return { title: root.eventTitle(running), running: true, start: began, end: end,""",
+        "summary": "a local event counts as running when it starts",
+    },
+    # The lead marks were all it said: an event that begins got no notice of its own. It now says "Starting now" once,
+    # when the clock reaches it, and the lead marks say how long is left instead of borrowing that sentence a minute
+    # early.
+    {
+        "id": "island-event-start",
+        "file": "bar/IrisIsland.qml",
+        "old": """        onTriggered: {
+            const entry = IrisFaces.IrisFaceData.nextEntry(Date.now(), 11)
+            if (entry.running || entry.title.length === 0 || entry.start <= 0) return
+            const mark = [10, 5, 1].filter(at => at <= root.upcomingLead).find(at => entry.left <= at && entry.left > at - 1)
+            const key = entry.start + ":" + mark
+            if (mark === undefined || root.eventSaid === key) return
+            root.eventSaid = key
+            root.showEvent("event", IrisStyle.danger, entry.title,
+                entry.left <= 1 ? Translation.tr("Starting now") : Translation.tr("In %1 min").arg(entry.left), 1 - entry.left / root.upcomingLead, "soon")
+        }""",
+        "new": """        onTriggered: {
+            const now = Date.now()
+            const entry = IrisFaces.IrisFaceData.nextEntry(now, 11)
+            if (entry.title.length === 0 || entry.start <= 0) return
+            // The event has begun: said once, at its start, after the lead marks said it was coming.
+            if (entry.running) {
+                const started = entry.start + ":0"
+                if (now - entry.start > 45000 || root.eventSaid === started) return
+                root.eventSaid = started
+                root.showEvent("event", IrisStyle.danger, entry.title, Translation.tr("Starting now"), -1, "soon")
+                return
+            }
+            const mark = [10, 5, 1].filter(at => at <= root.upcomingLead).find(at => entry.left <= at && entry.left > at - 1)
+            const key = entry.start + ":" + mark
+            if (mark === undefined || root.eventSaid === key) return
+            root.eventSaid = key
+            root.showEvent("event", IrisStyle.danger, entry.title,
+                Translation.tr("In %1 min").arg(entry.left), 1 - entry.left / root.upcomingLead, "soon")
+        }""",
+        "summary": "an event says it starts when it does",
+    },
     # Google Calendar had no surface in Settings: configure the client, press Connect, read the code.
     {
         "id": "settings-google-card",
