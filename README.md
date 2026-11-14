@@ -67,7 +67,10 @@ line the microphone or a timer uses, beside the clock. It gives the event at the
 lead you choose in Settings (ten, five or one minute, a ring closing on the
 start) and again when its time comes, and the line keeps the next event with
 how long is left. An event kept by this desktop gets both; a feed's gets the
-lead marks from the same timer and the start from the end it carries.
+lead marks from the same timer and the start from the end it carries. It rings
+too, a minute out and at the start, so the event is heard without looking; the
+alert sounds switch and volume in Settings govern it, and `sounds.events.
+calendarEvent` picks another sound.
 
 **The recorder picks its device.** Under the audio mode there is a row for the
 microphone and another for the system sound, each opening the mixer's list over
