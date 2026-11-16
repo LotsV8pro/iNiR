@@ -70,7 +70,16 @@ how long is left. An event kept by this desktop gets both; a feed's gets the
 lead marks from the same timer and the start from the end it carries. It rings
 too, a minute out and at the start, so the event is heard without looking; the
 alert sounds switch and volume in Settings govern it, and `sounds.events.
-calendarEvent` picks another sound.
+calendarEvent` picks another sound. A start and a lead are looked up on their
+own, so an event that has been running for hours no longer hides the one that
+begins after it.
+
+**The microphone's edge lights in each screen's own colours.** A band ran round
+every screen in the shell's fixed spectrum whenever an app started listening.
+It now reads six points of the picture that screen shows — the wallpaper behind
+it, at the places the band passes — and turns through those, so two monitors
+light in their own colours and both follow a new wallpaper. A screen whose
+picture cannot be read keeps the spectrum.
 
 **The recorder picks its device.** Under the audio mode there is a row for the
 microphone and another for the system sound, each opening the mixer's list over

@@ -343,8 +343,9 @@ PATCHES = [
     },
     # The lead marks were all it said: an event that begins got no notice of its own. It now says "Starting now" once,
     # when the clock reaches it, and the lead marks say how long is left instead of borrowing that sentence a minute
-    # early. It also rings when it takes the line, at the last lead mark and at the start, so a person away from the
-    # screen hears the event instead of having to look; alert sounds off turns the ring off with the rest.
+    # early. It also rings at the last lead mark and at the start, so a person away from the screen hears the event
+    # instead of having to look; alert sounds off turns the ring off with the rest. The ring does not wait for the
+    # notice to be drawn: a fullscreen window hides the Island, not the event.
     {
         "id": "island-event-start",
         "file": "bar/IrisIsland.qml",
@@ -360,24 +361,25 @@ PATCHES = [
         }""",
         "new": """        onTriggered: {
             const now = Date.now()
-            const entry = IrisFaces.IrisFaceData.nextEntry(now, 11)
-            if (entry.title.length === 0 || entry.start <= 0) return
-            // The event has begun: said once, at its start, after the lead marks said it was coming.
-            if (entry.running) {
-                const started = entry.start + ":0"
-                if (now - entry.start > 45000 || root.eventSaid === started) return
-                root.eventSaid = started
-                root.showEvent("event", IrisStyle.danger, entry.title, Translation.tr("Starting now"), -1, "soon")
-                if (root.eventShown && (Config.options?.sounds?.notifications ?? true)) Audio.playEvent("calendarEvent")
+            // The event that just began: said once, at its start, after the lead marks said it was coming.
+            const started = IrisFaces.IrisFaceData.startedEntry(now, 45000)
+            if (started.title.length > 0) {
+                const key = started.start + ":0"
+                if (root.eventSaid === key) return
+                root.eventSaid = key
+                root.showEvent("event", IrisStyle.danger, started.title, Translation.tr("Starting now"), -1, "soon")
+                if (Config.options?.sounds?.notifications ?? true) Audio.playEvent("calendarEvent")
                 return
             }
+            const entry = IrisFaces.IrisFaceData.upcomingEntry(now, 11)
+            if (entry.title.length === 0 || entry.start <= 0) return
             const mark = [10, 5, 1].filter(at => at <= root.upcomingLead).find(at => entry.left <= at && entry.left > at - 1)
             const key = entry.start + ":" + mark
             if (mark === undefined || root.eventSaid === key) return
             root.eventSaid = key
             root.showEvent("event", IrisStyle.danger, entry.title,
                 Translation.tr("In %1 min").arg(entry.left), 1 - entry.left / root.upcomingLead, "soon")
-            if (mark <= 1 && root.eventShown && (Config.options?.sounds?.notifications ?? true)) Audio.playEvent("calendarEvent")
+            if (mark <= 1 && (Config.options?.sounds?.notifications ?? true)) Audio.playEvent("calendarEvent")
         }""",
         "summary": "an event says it starts when it does",
     },
@@ -401,6 +403,118 @@ PATCHES = [
         "new": '        { section: "sources", group: "Calendar", label: "Refresh every", path: "calendar.externalSync.refreshMinutes", visibleWhen: "calendar.externalSync.enable", kind: "range", fallback: 15, min: 5, max: 120, step: 5, unit: " min" },\n'
         + GOOGLE_ROWS,
         "summary": "Google push and import rows next to the feed ones",
+    },
+    # The microphone's edge glow turned through the shell's fixed spectrum on every screen, whatever picture sat
+    # behind it. It now reads the wallpaper of the screen it lights: six points round that screen's edge, in the order
+    # the band travels, so two monitors light in their own colours and both follow a new wallpaper.
+    {
+        "id": "edge-glow-wallpaper",
+        "file": "frame/IrisEdgeGlow.qml",
+        "old": """                        fillGradient: ConicalGradient {
+                            centerX: glow.width / 2
+                            centerY: glow.height / 2
+                            angle: glow.turn
+                            GradientStop { position: 0.0; color: IrisStyle.identity.blue }
+                            GradientStop { position: 0.17; color: IrisStyle.identity.purple }
+                            GradientStop { position: 0.33; color: IrisStyle.identity.pink }
+                            GradientStop { position: 0.5; color: IrisStyle.identity.orange }
+                            GradientStop { position: 0.67; color: IrisStyle.identity.yellow }
+                            GradientStop { position: 0.83; color: IrisStyle.identity.green }
+                            GradientStop { position: 1.0; color: IrisStyle.identity.blue }
+                        }""",
+        "new": """                        fillGradient: ConicalGradient {
+                            centerX: glow.width / 2
+                            centerY: glow.height / 2
+                            angle: glow.turn
+                            GradientStop { position: 0.0; color: glow.lights[0] }
+                            GradientStop { position: 0.17; color: glow.lights[1] }
+                            GradientStop { position: 0.33; color: glow.lights[2] }
+                            GradientStop { position: 0.5; color: glow.lights[3] }
+                            GradientStop { position: 0.67; color: glow.lights[4] }
+                            GradientStop { position: 0.83; color: glow.lights[5] }
+                            GradientStop { position: 1.0; color: glow.lights[0] }
+                        }""",
+        "summary": "the glow wears each screen's wallpaper",
+    },
+    {
+        "id": "edge-glow-wallpaper-comment",
+        "file": "frame/IrisEdgeGlow.qml",
+        "old": """// The edge of every screen lights in the spectrum for a moment when something starts listening through the
+// microphone, the way a phone shows its assistant is listening: a band of colour turning around the screen over
+// everything, never taking a click, gone in three seconds.""",
+        "new": """// The edge of every screen lights in the colours of its own wallpaper for a moment when something starts listening
+// through the microphone, the way a phone shows its assistant is listening: a band of colour turning around the
+// screen over everything, never taking a click, gone in three seconds.""",
+        "summary": "the glow's header says what it now draws",
+    },
+    {
+        "id": "edge-glow-wallpaper-lights",
+        "file": "frame/IrisEdgeGlow.qml",
+        "old": """        property real turn: 0
+        screen: glow.modelData""",
+        "new": """        property real turn: 0
+        // The six colours the band turns through, read from this screen's own picture at the points the gradient
+        // passes: right, upper right, upper left, left, lower left, lower right. A picture Lume cannot read leaves
+        // the shell's spectrum standing, so the glow never goes dark.
+        readonly property var lights: {
+            const name = String(glow.modelData?.name ?? "")
+            const w = glow.width
+            const h = glow.height
+            const spots = [[0.96, 0.5], [0.84, 0.1], [0.16, 0.1], [0.04, 0.5], [0.16, 0.9], [0.84, 0.9]]
+            const fallback = [IrisStyle.identity.blue, IrisStyle.identity.purple, IrisStyle.identity.pink,
+                IrisStyle.identity.orange, IrisStyle.identity.yellow, IrisStyle.identity.green]
+            if (name.length === 0 || w <= 0 || h <= 0) return fallback
+            return spots.map((spot, at) => {
+                const sample = Lume.read(name, Math.round(w * spot[0] - w * 0.07), Math.round(h * spot[1] - h * 0.05),
+                    Math.round(w * 0.14), Math.round(h * 0.1))
+                if (!sample) return fallback[at]
+                const ink = Qt.color(sample.color)
+                // A picture is quieter than a lamp: lift the chroma and hold the tone where the band still reads on glass.
+                return Qt.hsla(ink.hslHue, Math.min(1, Math.max(0.45, ink.hslSaturation * 1.35)),
+                    Math.min(0.72, Math.max(0.42, ink.hslLightness)), 1)
+            })
+        }
+        screen: glow.modelData""",
+        "summary": "the glow reads six points of the picture, per screen",
+    },
+    {
+        "id": "face-data-entries",
+        "file": "widgets/IrisFaceData.qml",
+        "old": """    function spanWords(minutes: int): string {""",
+        "new": """    // The event that began within `within` ms of `at`, latest first: a start announced on its own, so one that has
+    // been running for a while cannot hide the one that just began.
+    function startedEntry(at: real, within: int): var {
+        const here = new Date(at)
+        const pool = Array.from(CalendarSync.getEventsForDate(here) ?? [])
+            .concat(Array.from(Events.getAllEventsForDate(here) ?? []))
+        const fresh = pool.filter(event => {
+            const began = root.eventDate(event).getTime()
+            return !event.allDay && began <= at && at - began <= within
+        }).sort((a, b) => root.eventDate(b) - root.eventDate(a))
+        const event = fresh[0]
+        if (!event) return { title: "", running: false, start: 0, end: 0, left: 0, when: "" }
+        const start = root.eventDate(event).getTime()
+        return { title: root.eventTitle(event), running: true, start: start, end: start + 60000, left: 0,
+            when: Translation.tr("Starting now") }
+    }
+
+    // The timed event that starts within `reach` minutes, whatever is running now: a long event must not keep the
+    // Island from saying the one that comes after it.
+    function upcomingEntry(at: real, reach: int): var {
+        const here = new Date(at)
+        const next = root.upcomingEvents(here, 1).find(event => {
+            const left = root.eventDate(event).getTime() - at
+            return !event.allDay && left > 0 && left <= reach * 60000
+        })
+        if (!next) return { title: "", running: false, start: 0, end: 0, left: 0, when: "" }
+        const start = root.eventDate(next).getTime()
+        const left = Math.ceil((start - at) / 60000)
+        return { title: root.eventTitle(next), running: false, start: start, end: start + 1800000, left: left,
+            when: left < 180 ? Translation.tr("in %1").arg(root.spanWords(left)) : root.clockText(new Date(start)) }
+    }
+
+    function spanWords(minutes: int): string {""",
+        "summary": "a start and a lead are each found on their own",
     },
 ]
 
