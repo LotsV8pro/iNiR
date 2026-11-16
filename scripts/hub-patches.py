@@ -326,7 +326,8 @@ PATCHES = [
         const running = Array.from(CalendarSync.getEventsForDate(here) ?? []).find(event => !event.allDay && event.endDate
             && new Date(event.startDate).getTime() <= at && at < new Date(event.endDate).getTime())
         if (running) {
-            const end = new Date(running.endDate).getTime()""",
+            const end = new Date(running.endDate).getTime()
+            return { title: root.eventTitle(running), running: true, start: new Date(running.startDate).getTime(), end: end,""",
         "new": """        const here = new Date(at)
         // A feed's event says when it ends; one this desktop keeps does not, and it counts as running for the minute it
         // begins, so the Island can say it started instead of dropping it once its time arrives.
@@ -480,8 +481,12 @@ PATCHES = [
     {
         "id": "face-data-entries",
         "file": "widgets/IrisFaceData.qml",
-        "old": """    function spanWords(minutes: int): string {""",
-        "new": """    // The event that began within `within` ms of `at`, latest first: a start announced on its own, so one that has
+        "old": """        return { title: allDay ? root.eventTitle(allDay) : "", running: false, start: 0, end: 0, left: 0, when: "" }
+    }
+    function spanWords(minutes: int): string {""",
+        "new": """        return { title: allDay ? root.eventTitle(allDay) : "", running: false, start: 0, end: 0, left: 0, when: "" }
+    }
+    // The event that began within `within` ms of `at`, latest first: a start announced on its own, so one that has
     // been running for a while cannot hide the one that just began.
     function startedEntry(at: real, within: int): var {
         const here = new Date(at)
@@ -515,6 +520,221 @@ PATCHES = [
 
     function spanWords(minutes: int): string {""",
         "summary": "a start and a lead are each found on their own",
+    },
+    {
+        "id": "sidebar-event-category",
+        "file": "sidebar/IrisSidebarSection.qml",
+        "old": """                property int reminder: 15
+                Connections {
+""",
+        "new": """                property int reminder: 15
+                // A birthday is a yearly event with a category of its own: the composer offers it as one choice, reads the
+                // name and the date from the Google address book, and keeps the event on the same day each year.
+                property string category: "general"
+                property bool yearly: false
+                property var found: []
+                readonly property var categories: [
+                    { label: Translation.tr("General"), value: "general" },
+                    { label: Translation.tr("Birthday"), value: "birthday" },
+                    { label: Translation.tr("Meeting"), value: "meeting" },
+                    { label: Translation.tr("Deadline"), value: "deadline" },
+                    { label: Translation.tr("Reminder"), value: "reminder" }
+                ]
+                Connections {
+""",
+        "summary": "the calendar composer offers a category",
+    },
+    {
+        "id": "sidebar-event-yearly",
+        "file": "sidebar/IrisSidebarSection.qml",
+        "old": """                        eventTitle.clear()
+                        timePicker.hour = (DateTime.clock.date.getHours() + 1) % 24
+                        timePicker.minuteIndex = 0
+                        eventSheet.reminder = 15
+                    }
+                }
+""",
+        "new": """                        eventTitle.clear()
+                        timePicker.hour = (DateTime.clock.date.getHours() + 1) % 24
+                        timePicker.minuteIndex = 0
+                        eventSheet.reminder = 15
+                        eventSheet.category = "general"
+                        eventSheet.yearly = false
+                        eventSheet.found = []
+                        contactQuery.text = ""
+                    }
+                }
+""",
+        "summary": "a birthday is kept every year",
+    },
+    {
+        "id": "sidebar-event-contact",
+        "file": "sidebar/IrisSidebarSection.qml",
+        "old": """                function add(): void {
+                    const title = eventTitle.text.trim()
+                    if (!title) return
+                    const dayDate = calendar.selectedDate
+                    const when = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), timePicker.hour, timePicker.minuteIndex * 5)
+                    Events.addEvent(title, "", when.toISOString(), "general", "normal", eventSheet.reminder, "none")
+                    calendar.composing = false
+                }
+
+                IrisField {
+                    id: eventTitle
+""",
+        "new": """                function add(): void {
+                    const title = eventTitle.text.trim()
+                    if (!title) return
+                    const dayDate = calendar.selectedDate
+                    const when = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), timePicker.hour, timePicker.minuteIndex * 5)
+                    Events.addEvent(title, "", when.toISOString(), eventSheet.category, "normal", eventSheet.reminder,
+                        eventSheet.yearly ? "yearly" : "none")
+                    calendar.composing = false
+                }
+                // A person picked from the address book: their name in the title, their coming birthday on the calendar's
+                // own day, nine in the morning, and the year kept. A contact People lists without a date leaves the day
+                // already chosen alone.
+                function pick(person: var): void {
+                    const born = person?.date ? new Date(person.date) : null
+                    if (born && !isNaN(born.getTime())) {
+                        calendar.selectedDate = new Date(born.getFullYear(), born.getMonth(), born.getDate())
+                        timePicker.hour = 9
+                        timePicker.minuteIndex = 0
+                    }
+                    eventTitle.text = person?.name ?? ""
+                    eventSheet.category = "birthday"
+                    eventSheet.yearly = true
+                    eventSheet.reminder = 60
+                    contactQuery.text = ""
+                    eventSheet.found = []
+                }
+
+                IrisField {
+                    id: eventTitle
+""",
+        "summary": "a contact fills a birthday in",
+    },
+    {
+        "id": "sidebar-event-picker",
+        "file": "sidebar/IrisSidebarSection.qml",
+        "old": """                        text: Translation.tr("Event name")
+                        color: IrisStyle.muted
+                        font.pixelSize: IrisStyle.typeBody
+                    }
+                }
+
+                IrisWheelPicker {
+                    id: timePicker
+""",
+        "new": """                        text: Translation.tr("Event name")
+                        color: IrisStyle.muted
+                        font.pixelSize: IrisStyle.typeBody
+                    }
+                }
+
+                Flow {
+                    id: categoryFlow
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: categoryFlow.childrenRect.height
+                    spacing: 4 * root.d
+                    Repeater {
+                        model: eventSheet.categories
+                        IrisButton {
+                            required property var modelData
+                            text: modelData.label
+                            selected: eventSheet.category === modelData.value
+                            quiet: !selected
+                            implicitHeight: Math.round(26 * root.d)
+                            buttonRadius: IrisStyle.capsule(height)
+                            buttonRadiusPressed: IrisStyle.capsule(height)
+                            onClicked: {
+                                eventSheet.category = modelData.value
+                                if (modelData.value === "birthday") eventSheet.yearly = true
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 4 * root.d
+                    IrisButton {
+                        text: Translation.tr("Once")
+                        selected: !eventSheet.yearly
+                        quiet: eventSheet.yearly
+                        implicitHeight: Math.round(26 * root.d)
+                        buttonRadius: IrisStyle.capsule(height)
+                        buttonRadiusPressed: IrisStyle.capsule(height)
+                        onClicked: eventSheet.yearly = false
+                    }
+                    IrisButton {
+                        text: Translation.tr("Every year")
+                        selected: eventSheet.yearly
+                        quiet: !eventSheet.yearly
+                        implicitHeight: Math.round(26 * root.d)
+                        buttonRadius: IrisStyle.capsule(height)
+                        buttonRadiusPressed: IrisStyle.capsule(height)
+                        onClicked: eventSheet.yearly = true
+                    }
+                }
+
+                IrisField {
+                    id: contactQuery
+                    Layout.fillWidth: true
+                    visible: eventSheet.category === "birthday"
+                    implicitHeight: Math.round(40 * root.d)
+                    font.pixelSize: IrisStyle.typeBody
+                    placeholderText: Translation.tr("Find a contact")
+                    onTextChanged: eventSheet.found = contactQuery.text.trim().length >= 2
+                        ? CalendarSync.findContacts(contactQuery.text).filter(person => person.birthdayKnown) : []
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    visible: eventSheet.found.length > 0
+                    spacing: 2 * root.d
+                    Repeater {
+                        model: eventSheet.found
+                        Rectangle {
+                            id: personRow
+                            required property var modelData
+                            width: parent.width
+                            implicitHeight: Math.round(34 * root.d)
+                            radius: IrisStyle.radiusSmall
+                            color: personArea.containsMouse ? IrisStyle.tintFill(IrisStyle.accent) : "transparent"
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8 * root.d
+                                anchors.rightMargin: 8 * root.d
+                                spacing: 8 * root.d
+                                MaterialSymbol { text: "cake"; fill: 1; iconSize: Math.round(15 * root.d); color: IrisStyle.identity.pink }
+                                IrisText {
+                                    Layout.fillWidth: true
+                                    text: personRow.modelData.name
+                                    elide: Text.ElideRight
+                                    font.pixelSize: IrisStyle.typeBody
+                                }
+                                IrisText {
+                                    text: Qt.formatDate(new Date(personRow.modelData.date), "d MMM yyyy")
+                                    color: IrisStyle.subtext
+                                    font.pixelSize: IrisStyle.typeLabel
+                                }
+                            }
+                            MouseArea {
+                                id: personArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: eventSheet.pick(personRow.modelData)
+                            }
+                        }
+                    }
+                }
+
+                IrisWheelPicker {
+                    id: timePicker
+""",
+        "summary": "the composer searches the address book",
     },
 ]
 

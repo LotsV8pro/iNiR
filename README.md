@@ -53,14 +53,18 @@ on the first frame; a pixel read of the frame on screen every twenty seconds
 now feeds the palette, and the colour moves with the clip.
 
 **Google Calendar.** The calendar reads Google over OAuth (loopback redirect,
-or the device code from a terminal): its events join the iCal feeds, contacts
-offer names and birthdays when you write one, and a new event can be pushed
-back to Google. Contacts live in their own cache so the composer does not walk
-the whole calendar on each keystroke. It is off until you put your own OAuth
-client in `calendar.googleOAuth` (`clientId`, `clientSecret`, `pushEnabled`,
+or the device code from a terminal): its events join the iCal feeds, and a new
+event can be pushed back to Google. In the sidebar's composer an event takes a
+category, a repeat each year, or a birthday: choose Birthday, type two letters
+and the search reads the Google address book, filling the name and the coming
+date. Contacts live in their own cache so the search does not walk the whole
+calendar on each keystroke. It is off until you put your own OAuth client in
+`calendar.googleOAuth` (`clientId`, `clientSecret`, `pushEnabled`,
 `importDays`); the card in Settings › Sources › Calendar takes the client,
 starts the sign-in and shows the code, and `inir ipc calendar authorize` does
-the same from a terminal.
+the same from a terminal. The contacts and the push need that account
+connected; a revoked token leaves the calendar feeds working and the address
+book on its last copy.
 
 **A calendar event is said in the Island.** Not a notification toast: the same
 line the microphone or a timer uses, beside the clock. It gives the event at the
