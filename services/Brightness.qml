@@ -753,6 +753,10 @@ Singleton {
                 stdout: StdioCollector {
                     id: lightnessCollector
                     onStreamFinished: {
+                        // A sample started while the switch was on can land after it was turned off (a shell restart
+                        // reloads the config while these processes are still running). Do not change the brightness
+                        // when the feature is no longer on.
+                        if (!screenScope.antiFlashbangActive) return
                         // No cleanup needed - we pipe directly to magick without saving file
                         root.applyLightness(screenScope.modelData, parseFloat(lightnessCollector.text))
                     }
