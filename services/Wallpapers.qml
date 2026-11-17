@@ -593,7 +593,7 @@ Singleton {
         if (!clean || !root.isVideoFile(clean) || height <= 0) return clean
         const tier = root._videoPlaybackHeights.find(h => h >= height) ?? 0
         if (!tier) return clean
-        const rate = fps > 0 ? fps : tier <= 540 ? 30 : 0
+        const rate = fps > 0 ? fps : 30
         const key = clean + "@" + tier + "@" + rate
         const state = root.videoPlaybackCopies[key]
         if (state === undefined) {
