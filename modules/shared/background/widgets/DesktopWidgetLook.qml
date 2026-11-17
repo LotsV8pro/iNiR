@@ -34,7 +34,14 @@ Singleton {
         const moving = Wallpapers.movingSeed(output)
         if (moving.length > 0) return moving
         const sample = Lume.read(output, 0, 0, screen.width, screen.height)
-        return sample ? String(Qt.color(sample.color)) : ""
+        const mean = sample ? Qt.color(sample.color) : null
+        // A picture that is mostly dark keeps its colour in a small lit subject. The full-screen mean then has no
+        // chroma and the widgets stay on the family's fixed accent; the lit cells carry the wallpaper's hue instead.
+        if (!mean || Math.max(mean.r, mean.g, mean.b) - Math.min(mean.r, mean.g, mean.b) < 0.06) {
+            const accent = Lume.accentOf(output)
+            if (accent) return String(Qt.color(accent))
+        }
+        return mean ? String(Qt.color(mean)) : ""
     }
     // The token keeps the tone the family solved (lightness, alpha): only the hue and the chroma come from the
     // picture. A picture with no chroma leaves the mark neutral rather than inventing a tint from three units of

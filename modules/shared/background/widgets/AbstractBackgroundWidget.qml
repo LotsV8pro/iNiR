@@ -776,8 +776,20 @@ AbstractWidget {
         // The colour other choices are measured against moves only on a visible change, so the
         // accent picked from it does not hop while the widget slides over similar pixels.
         if (root.regionLuminance < 0 || light !== root.backdropIsLight
-                || Math.abs(lum - root.regionLuminance) > 0.05)
-            root.dominantColor = sample.color
+                || Math.abs(lum - root.regionLuminance) > 0.05) {
+            const ink = Qt.color(sample.color)
+            const chroma = Math.max(ink.r, ink.g, ink.b) - Math.min(ink.r, ink.g, ink.b)
+            // A dark, nearly grey patch has no hue of its own, so the wallpaper roles fell back to a flat accent.
+            // A picture that is mostly black can still have a lit subject: borrow its hue, but keep this region's
+            // brightness for contrast, or the ink stops answering where the wallpaper is actually dark.
+            if (chroma < 0.06) {
+                const wallpaper = Lume.accentOf(root.outputName)
+                if (wallpaper) {
+                    const lit = Qt.color(wallpaper)
+                    root.dominantColor = Qt.hsla(lit.hslHue, lit.hslSaturation, ink.hslLightness, 1)
+                } else root.dominantColor = sample.color
+            } else root.dominantColor = sample.color
+        }
         root.regionLuminance = lum
         root.backdropIsLight = light
         root.backdropIsBright = Lume.lightAfter(lum, root.backdropIsBright, root._brightEnter, root._brightLeave)

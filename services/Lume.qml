@@ -79,6 +79,31 @@ Singleton {
         return WallpaperLuma.sample(path, Math.round(screen.width), Math.round(screen.height), x, y, w, h, mode)
     }
 
+    // The colour a picture keeps where it has any: a mean over the whole screen buries a small, lit subject in dark
+    // pixels, and a wallpaper that is mostly black then reads as grey. Only cells with chroma of their own count, and
+    // the darkest and brightest ones are left out so a highlight or a black corner cannot carry the seed alone.
+    function accentOf(output: string): var {
+        const path = root.wallpaperOf(output)
+        const screen = root.screenNamed(output)
+        if (!screen || !path) return null
+        const mode = Wallpapers.fillMode
+        let data = WallpaperLuma.maps[WallpaperLuma.keyFor(path, screen.width, screen.height, mode)]
+        if (mode === "span")
+            data = WallpaperLuma.maps[WallpaperLuma.keyFor(path, Math.round(Wallpapers.spanArea.width),
+                Math.round(Wallpapers.spanArea.height), "fill")]
+        if (!data) return null
+        let r = 0, g = 0, b = 0, n = 0
+        for (let i = 0; i < data.r.length; i++) {
+            const red = data.r[i], green = data.g[i], blue = data.b[i]
+            const chroma = (Math.max(red, green, blue) - Math.min(red, green, blue)) / 255
+            const level = data.mean[i] / 255
+            if (chroma < 0.12 || level < 0.2 || level > 0.9) continue
+            r += red; g += green; b += blue; n++
+        }
+        if (n === 0) return null
+        return Qt.rgba(r / n / 255, g / n / 255, b / n / 255, 1)
+    }
+
     // Windows are open on the output's active workspace: compositor blur shows them, not the wallpaper.
     function covered(output: string): bool {
         if (!CompositorService.isNiri) return false
